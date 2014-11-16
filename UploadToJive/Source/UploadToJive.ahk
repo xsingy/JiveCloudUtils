@@ -615,6 +615,7 @@ Loop {
               position := RegExMatch(output,";\R{")
               jsonStr := SubStr(output,position+2)
               
+              ;error handling
               ;check if the server sent a response
               if (position=0) {
                 ;oops there is no clean response from Jive server
@@ -701,7 +702,6 @@ Loop {
        
       wInfo("**********************************" )
       wInfo("*** Getting list of files already existing in """ . placeName . """")
-      wInfo("Files found:" ) 
       
       startIndex := 0
       pageSize := 100
@@ -711,7 +711,7 @@ Loop {
       
       Loop{
       
-          cURL_command := "CURL -i -u " . userID . ":" . password . " " . (curlExtra = "" ? "" : curlExtra . " ") . """" . jiveInstanceURL . "/api/core/v3/contents?count=" . pageSize . "&startIndex=" . startIndex . "&fields=name,subject,content,tags,categories&filter=place%28" . placeURI . "%29&filter=type%28file%29"""
+          cURL_command := "CURL -i -u " . userID . ":" . password . " " . (curlExtra = "" ? "" : curlExtra . " ") . """" . jiveInstanceURL . "/api/core/v3/contents?count=" . pageSize . "&startIndex=" . startIndex . "&fields=name,subject,content,tags,categories,parent&filter=place%28" . placeURI . "%29&filter=type%28file%29"""
                 
           ;wPrint(cURL_command . "`n")
           
@@ -724,11 +724,49 @@ Loop {
           if(debug="1")
             wPrint(output . "`n")
           
+          ;error handling
+          ;check if the server sent the list of content
+          if (position=0) {
+            ;oops there is no clean response from Jive server
+            ;display the response in the user interface            
+            GuiControl, Hide, MyText
+            Gui, Add, ActiveX, w500 h500 x0 y30 vdoc, HTMLFile
+            doc.write("Error connecting to Jive<br><br>Output:<br><hr><br>" . output)
+            Gui, Show, w500 h500 Center, HTML Gui
+            ComObjConnect(doc, Document)             
+            MsgBox, 4,,Error connecting to Jive. Try again?
+            Gui, Destroy            
+            IfMsgBox Yes
+                {
+                startAgain = true
+                break
+                }             
+            ExitApp
+          }          
+          if(startAgain) {
+             break
+          }
+          
+          ;now parse the response
           jsonObj := JSON.parse( jsonStr )
           
+          ;if there are no content items or no more items to fetch, break the loop
           if (jsonObj.list.MaxIndex()="")
               break
           
+          ;verify that the list of results is really coming from the target place (if the ID provided is actually the ID of a person Jive replies with the list of files of the person)
+          if (jsonObj.list[1].parent <> placeURI ){
+              MsgBox, 4,,The destination place ID you provided is not a place ID.`n`nMaybe you'll be more lucky using the destination place NAME instead of its ID. Try again?
+              Gui, Destroy
+              IfMsgBox Yes
+                  {
+                  startAgain = true
+                  break
+                  }
+              ExitApp
+          }
+          
+          ;this is the list of content items. Store it.
           Loop % jsonObj.list.MaxIndex()
             {
               ;storing the name of each file, reference, subject, description, tags and categories
@@ -738,6 +776,11 @@ Loop {
           
           startIndex := startIndex + pageSize
           
+      }
+      
+      ;if the procedure was aborted, go back to input screen
+      if(startAgain) {
+         goto loopstart
       }
       
       /*************************************************************************************************************************
@@ -846,7 +889,28 @@ Loop {
                     wInfo( "  ... uploaded successfully" )
                 }
               }
+              
+            ;verify that the error is not caused by an invalid Place ID (if the ID provided was actually the ID of a person Jive replies with the list of files of the person)
+            if(jsonObj.error<>"")
+            {
+              je:=jsonObj.error.message
+              IfInString, je, Invalid place ID
+              {
+                  MsgBox, 4,,The destination place ID you provided is not a place ID.`n`nMaybe you'll be more lucky using the destination place NAME instead of its ID. Try again?
+                  Gui, Destroy
+                  IfMsgBox Yes
+                      {
+                      startAgain = true
+                      break
+                      }
+                  ExitApp
+              }
+            }
         }
+      
+      if(startAgain) {
+          Goto, loopStart
+      }
                 
       ;wInfo(debugString)
       wInfo("**********************************" )
