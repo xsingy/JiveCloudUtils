@@ -1,0 +1,69 @@
+
+About UploadToJive.exe
+======================
+
+This program allows you to upload many TXT and HTML files in one shot into Documents into a specific JIVE group in Jive Cloud.
+
+Note that it does not upload the image files that could be referenced in the original .html files ;)
+
+Using it
+========
+ 
+1) Download the application "UploadToJiveDocuments.exe"
+
+Save it on your computer
+There is no installation required. Anyone can use it.
+ 
+2) Double click the app
+ 
+3) fill in the dialog box
+
+IMPORTANT: IF YOU ACCESS INTERNET THROUGH A PROXY THIS REQUIRES the following: 
+fill in "More CURL parameters" with the following information:
+-x http://myproxy.com:myproxyport --proxy-user <userID>:<password> -k
+ 
+Using <userID> and <password> tells the system to use the same userID and password
+and the ones you provided above in the form.
+
+Advanced features
+=================
+ 
+Using a config file
+-------------------
+ 
+To make things easier for your team, you can create a file named UploadToJiveDocuments.cfg,
+which will provide pre populated fields in UploadToJive.exe form. Set the fields
+you want with the values you want. The ones not used will be skipped.
+ 
+List of available fields:
+  jiveInstanceURL
+  filePattern
+  tags
+  categories
+  placeName
+  updateExisting
+  username
+  password
+  curlExtra
+  debug (set to 1 for debug - will output server responses to "out.txt" file)
+ 
+Format of UploadToJiveDocuments.cfg:
+{ 
+"jiveInstanceURL" : "https://mycompany.jiveon.com",
+"curlExtra" : "-x http://myproxy.com:myproxyport --proxy-user <userID>:<password> -k"
+}
+ 
+Drop it in the same folder as UploadToJiveDocuments.exe. When the user starts UploadToJiveDocuments.exe the fields will already have the values you defined.
+ 
+
+Command Line
+------------
+ 
+Alternatively, you can upload without opening the dialog box, using a Command Line
+ 
+If you do not understand what a "command line" is then use the other method ;-)
+
+For command line usage, type the command
+UploadToJiveDocuments.exe ?
+and you will find how to use it. Here's an example
+UploadToJiveDocuments.exe "https://mycompany.jiveon.com" "c:/temp/*.htm*" "test" "" "102020" 1 myuserid mYpAssWord "-x http://gateway.zscaler.net:9480 --proxy-user <userID>:<password> -k"
