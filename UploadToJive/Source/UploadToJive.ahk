@@ -328,6 +328,14 @@ ObjHasKey(aObj, aKey) {
     return, false, errorlevel := 1
 }
 
+;finds if an array has a specific value
+ArrayHasValue(aArr, aVal){
+	for each, value in aArr
+		if(value = aVal)
+            return, true, ErrorLevel := 0
+    return, false, errorlevel := 1
+}
+
 ;keeps the last k lines of a string
 StrTail(k,str) ;; Inspired by Laszlo (http://www.autohotkey.com/forum/topic6928.html)
 	{
@@ -347,12 +355,13 @@ StrTail(k,str) ;; Inspired by Laszlo (http://www.autohotkey.com/forum/topic6928.
 	Return L
 	}
 
-;concatenates several arrays into a single array
-Arr_concatenate(p*) {
+;merges several arrays into a single array (no duplicate values)
+Arr_merge(p*) {
     res := Object()
     For each, obj in p
         For each, value in obj
-            res.Insert(value)
+            if(!ArrayHasValue(res,value))
+				res.Insert(value)
     return res
 }
 
@@ -597,7 +606,7 @@ Loop {
           ;loop until there is no more place result
           Loop {
               ;CURL command to get the list of matching places
-              cURL_command := "CURL -i -u " . userID . ":" . password . " " . (curlExtra = "" ? "" : " " . curlExtra . " ") . " """ . jiveInstanceURL . "/api/core/v3/places?count=" . pageSize . "&startIndex=" . startIndex . "&filter=search%28" . uriEncode(placeName) . "%29"""
+              cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : " " . curlExtra . " ") . " """ . jiveInstanceURL . "/api/core/v3/places?count=" . pageSize . "&startIndex=" . startIndex . "&filter=search%28" . uriEncode(placeName) . "%29"""
               ;wPrint(cURL_command . "`n")
               
               ;call the CURL command
@@ -711,7 +720,7 @@ Loop {
       
       Loop{
       
-          cURL_command := "CURL -i -u " . userID . ":" . password . " " . (curlExtra = "" ? "" : curlExtra . " ") . """" . jiveInstanceURL . "/api/core/v3/contents?count=" . pageSize . "&startIndex=" . startIndex . "&fields=name,subject,content,tags,categories,parent&filter=place%28" . placeURI . "%29&filter=type%28file%29"""
+          cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . """" . jiveInstanceURL . "/api/core/v3/contents?count=" . pageSize . "&startIndex=" . startIndex . "&fields=name,subject,content,tags,categories,parent&filter=place%28" . placeURI . "%29&filter=type%28file%29"""
                 
           ;wPrint(cURL_command . "`n")
           
@@ -813,8 +822,8 @@ Loop {
                   StringReplace, contentString, contentString, ", \", All
                   
                   ;concatenate existing file tags with user provided file tags - also do this with categories
-                  contentTags := arrayToString(Arr_concatenate(existingFiles[A_LoopFileName][4],tagsA))
-                  contentCategories := arrayToString(Arr_concatenate(existingFiles[A_LoopFileName][5],categoriesA))
+                  contentTags := arrayToString(Arr_merge(existingFiles[A_LoopFileName][4],tagsA))
+                  contentCategories := arrayToString(Arr_merge(existingFiles[A_LoopFileName][5],categoriesA))
                   
                   ;build the json string            
                   contentJson := "{""type"":""file"",""subject"":'" . existingFiles[A_LoopFileName . addZIPext][2] . "',""visibility"":""place"",""parent"":'" . placeURI . "',""content"":{""type"":'text/html',""text"":""" . contentString . """},""tags"":" . contentTags . ",""categories"":" . contentCategories . "}"            
@@ -827,7 +836,7 @@ Loop {
                   FileAppend, %contentJson% , cou.tmp
                   
                   ;build the CURL command
-                  cURL_command := "CURL -X PUT -i -u " . userID . ":" . password . " " . (curlExtra = "" ? "" : curlExtra . " ") . "-F file1=@""" . A_LoopFileFullPath . """ -F ""json=@cou.tmp;type=application/json"" " . existingFiles[A_LoopFileName . withZIPext][1]
+                  cURL_command := "CURL -X PUT -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . "-F file1=@""" . A_LoopFileFullPath . """ -F ""json=@cou.tmp;type=application/json"" " . existingFiles[A_LoopFileName . withZIPext][1]
                   CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
                   output := CmdRun.StdOut.ReadAll() 
                   ;wPrint(cURL_command . "`n")
@@ -867,7 +876,7 @@ Loop {
                 if(debug="1")
                     wPrint( "JSON string sent to the server:`n" . contentJson . "`n" )
                 FileAppend, %contentJson% , cou.tmp
-                cURL_command := "CURL -i -u " . userID . ":" . password . " " . (curlExtra = "" ? "" : curlExtra . " ") . "-F file1=@""" . A_LoopFileFullPath . """ -F ""json=@cou.tmp;type=application/json"" " . jiveInstanceURL . "/api/core/v3/contents"
+                cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . "-F file1=@""" . A_LoopFileFullPath . """ -F ""json=@cou.tmp;type=application/json"" " . jiveInstanceURL . "/api/core/v3/contents"
                 CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
                 ;wPrint(cURL_command . "`n")
                 output := CmdRun.StdOut.ReadAll()
