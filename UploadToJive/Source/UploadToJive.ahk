@@ -462,480 +462,575 @@ else
 ;this allows to pre-populate the UI and is more convenient for basic users who actually always use the same settings
 ;only variables provided will be populated
 ;parameters can be provided as a mix of command line and config file - the app will merge values provided as command
-;line with the values provided in the config file 
+;line with the values provided in the config file
+;***
+;To upload multiple files with different parameters, provide the attributes in a multi levels
+;level 0: list
+;level 1: placeName
+;level 1: list
+;level 2: fileName, tags, categories[, subject][, text]  
+;example: "list" : [{"placeName" : "Jive Anywhere test group","list" : [{"filePattern" : "c:/temp/s*.jpg","tags":["blue","green"]},{"filePattern" : "c:/temp/k*.png","tags":["purple","lemon"],"text":"<body><div class=\"jive-rendered-content\"><p>adding some description</p><p><strong>some bold text</strong></p><p style=\"min-height: 8pt; padding: 0px;\">&nbsp;</p><table><tbody><tr><td style=\";\">and a cell in a table</td><td style=\";\">another celle</td></tr><tr><td style=\";\">and a 3 cell in a table</td><td style=\";\">another 4 cell</td></tr></tbody></table></div></body>"}]}]
 FileRead, Config, UploadToJive.cfg
 if not ErrorLevel  ; The config file was loaded.
-  {
-      jsonObj := JSON.parse( Config )
-      jiveInstanceURL:=jsonObj.jiveInstanceURL . jiveInstanceURL
-      filePattern:=jsonObj.filePattern . filePattern
-      tags:=jsonObj.tags . tags
-      categories:=jsonObj.categories . categories
-      placeName:=jsonObj.placeName . placeName
-      updateExisting:=jsonObj.updateExisting . updateExisting
-      userID:=jsonObj.userID . userID
-      password:=jsonObj.password . password
-      curlExtra:=jsonObj.curlExtra . curlExtra
-      ;set debug to 1 to output Jive server response to the out.txt file
-      debug:=jsonObj.debug
-      Config =  ; Free the memory.
-      
-  }
+{
+	jsonObj := JSON.parse( Config )
+	jiveInstanceURL:=jsonObj.jiveInstanceURL . jiveInstanceURL
+	filePattern:=jsonObj.filePattern . filePattern
+	tags:=jsonObj.tags . tags
+	categories:=jsonObj.categories . categories
+	placeName:=jsonObj.placeName . placeName
+	updateExisting:=jsonObj.updateExisting . updateExisting
+	userID:=jsonObj.userID . userID
+	password:=jsonObj.password . password
+	curlExtra:=jsonObj.curlExtra . curlExtra
+	;set debug to 1 to output Jive server response to the out.txt file
+	debug:=jsonObj.debug
+	;set prompt to "authenticate" to only prompt for username and password
+	;set prompt to "none" for no prompt at all
+	prompt:=jsonObj.prompt
+	;to upload many files in many places, store the parameters for each place in a JSON list, and the parameters for each file in a sub list
+	placeList:=jsonObj.list
+	Config =  ; Free the memory.
+}
 
 
 ;loop through the process until the user cancels
-Loop {
-      loopStart:
-      
-      ;to record the number of upload errors
-      errorCount:=0
-      
-      ;this is to store when there was a failure and the user wants to start again
-      startAgain:=0
+Loop
+{
+	loopStart:
 
-      /*************
-       * GUI to capture user input if the first 8 variables were not provided as parameters
-       * If some variables were provided as parameters or in the config file they will show pre-populated in the UI 
-       */
-        
-      if 0<8
-        {
-          ; get parameters when not provided as command line
-          
-          Gui, Add, Text, x6 y10 w160 h30 0x2, Jive URL
-          Gui, Add, Edit, x176 y6 w180 vjiveInstanceURL, %jiveInstanceURL%
-          Gui, Add, Text, x362 y10, ex: https://mycompany.jiveon.com
-          
-          Gui, Add, Text, x10 y40 w160 h30 0x2 , Path and pattern of files to upload
-          Gui, add, Edit, x176 y36 w180 vfilePattern, %filePattern% 
-          Gui, Add, Text, x362 y40, ex: g:\temp\*.png
-          
-          Gui, Add, Text, x10 y70 w160 h30 0x2 , Add the following tags
-          Gui, add, Edit, x176 y66 w180 vtags, %tags% 
-          Gui, Add, Text, x362 y70, ex: blue,large
-          
-          Gui, Add, Text, x10 y100 w160 h30 0x2 , Add the following categories
-          Gui, add, Edit, x176 y96 w180 vcategories, %categories%
-          Gui, Add, Text, x362 y100, ex: products,blue line
-          
-          Gui, Add, Text, x6 y130 w160 h30 0x2, Destination place (name or ID)
-          Gui, Add, Edit, x176 y126 w180 vplaceName, %placeName%
-          Gui, Add, Text, x362 y130, ex: my place
-          
-          Gui, Add, Text, x10 y160 w160 h30 0x2, When a file exists in destination
-          
-          if updateExisting=0
-            Gui, add, DropDownList, x176 y156 w180 vupdateExisting, skip it||update it with source file
-          else
-            Gui, add, DropDownList, x176 y156 w180 vupdateExisting, skip it|update it with source file||
-      
-          Gui, Add, Text, x10 y190 w160 h30 0x2, User ID
-          Gui, add, Edit, x176 y186 w180 vuserID, %userID%
-          Gui, Add, Text, x362 y190, ex: XID 
-          
-          Gui, Add, Text, x6 y220 w160 h30 0x2, Password
-          Gui, Add, Edit, x176 y216 w180 vpassword password, %password%
-          Gui, Add, Text, x362 y220, ex: myPA55worD 
-          
-          Gui, Add, Text, x6 y250 w160 h30 0x2, More CURL parameters
-          Gui, Add, Edit, x176 y246 w180 h20 vcurlExtra, %curlExtra%
-          Gui, Add, Text, x362 y250, ex: -x http://proxy.mycompany.com:8123 --proxy-user XID:myPA55worD -k 
-             
-          Gui, add, Button, gSubmit x176 y280 w180, OK 
-          Gui, show
-          
-          return
-          
-          ;if escape, close or cancel is used, exit the app gracefully
-          GuiEscape:
-          GuiClose:
-          ButtonCancel:
-          ExitApp
-        }
-      
-      ;if submit button was used, clear the UI
-      Submit:
-      Gui, Submit, NoHide
-      Gui, Destroy
-      
-      ;clean up the filePattern in case user used forward slash instead of backward slash
-      StringReplace, filePattern, filePattern, /, \, All
-      
-      ;Replace userID and password within curlExtra parameters if <userID> or <password> is provided
-      StringReplace, curlExtra, curlExtra, <userID>, %userID%, All       
-      StringReplace, curlExtra, curlExtra, <password>, %password%, All
-      
-      ;store tags into an array
-      tagsA := StrSplit(tags, "`,")
-      categoriesA := StrSplit(categories, "`,")
-      
-      ;**********
-      ;GUI to display output
-      Gui +LastFound +ToolWindow 
-      Gui, Color, FFFFFF
-      Gui Font, s10 Bold
-      Gui, Add, Text, , Uploading files matching pattern %filePattern% into group %placeName% 
-      Gui Font, s8 BoldNormal 
-      Gui Color, BBBBBB 
-      Gui, Add, Text, w600 h390 vMyText -Background, ttttttt 
-      Gui, Show, % "x" . A_ScreenWidth/2-310 . " y" . A_ScreenHeight/2-210 . " w620 h440"      
-      ;This variable will store information to display while the app runs
-      infoString := ""
-      
-      ;**********
-      ;check if the place ID was provided, if so build place UI, otherwise, get the place ID by searching through all matching places
-      
-      if updateExisting is not integer
-        updateExisting = (updateExisting=skip it)?0:1   
-      if placeName is integer 
-        {
-        placeURI := jiveInstanceURL . "/api/core/v3/places/" . placeName
-        }
-      else
-        {
-          /*
-           *   Get place URI
-           */ 
-          wInfo("**********************************" )
-          wInfo("Getting place ID of """ . placeName . """")
-          
-          ;start at first result, and download list of places by batch of 25
-          startIndex := 0
-          pageSize := 25
-      
-          ;loop until there is no more place result
-          Loop {
-              ;CURL command to get the list of matching places
-              cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : " " . curlExtra . " ") . " """ . jiveInstanceURL . "/api/core/v3/places?count=" . pageSize . "&startIndex=" . startIndex . "&filter=search%28" . uriEncode(placeName) . "%29"""
-              ;wPrint(cURL_command . "`n")
-              
-              ;call the CURL command
-              Cmd := ComObjCreate("WScript.Shell")
-              CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
-              
-              ;catch the output
-              output := CmdRun.StdOut.ReadAll()
-              
-              ;send to out file for debugging
-              if(debug="1")
-                wPrint(output . "`n")
-              
-              ;clean up the response to use only the JSON response part
-              position := RegExMatch(output,";\R{")
-              jsonStr := SubStr(output,position+2)
-              
-              ;error handling
-              ;check if the server sent a response
-              if (position=0) {
-                ;oops there is no clean response from Jive server
-                ;display the response in the user interface
-                
-                GuiControl, Hide, MyText
-                Gui, Add, ActiveX, w500 h500 x0 y30 vdoc, HTMLFile
-                doc.write("Error connecting to Jive<br><br>Output:<br><hr><br>" . output)
-                Gui, Show, w500 h500 Center, HTML Gui
-                ComObjConnect(doc, Document)
-                
-                MsgBox, 4,,Error connecting to Jive. Try again?
-                
-                Gui, Destroy
-                
-                IfMsgBox Yes
-                    {
-                    startAgain = true
-                    break
-                    }
-                
-                ExitApp
-              }
-              
-              if(startAgain) {
-                  Goto, loopStart
-              }
-              
-              ;convert the JSON response into an object
-              jsonObj := JSON.parse( jsonStr )
-              
-              ;if the JSON response is an empty list (=no result or no more result) stop looping
-              if (jsonObj.list.MaxIndex()="")
-                  break
-              
-              ;go through the list of results
-              For index, valueP in jsonObj.list
-              {
-                  ;wInfo( "  " . valueP.name )
-                  ;check if the result is the expected place
-                  if(valueP.name = placeName) {
-                      ;capture the placeURI
-                      placeURI := valueP.resources.self.ref
-                      wInfo("Place ID of """ . valueP.name . """ : " . valueP.placeID)
-                      break
-                  }
-              }
-              
-              ;if the place was not found, keep looping, otherwise, exit the loop
-              if(placeURI="") {
-                  startIndex := startIndex + pageSize
-              } else {
-                  break
-              }
-          
-          }
-          
-          if(startAgain) {
-                  Goto, loopStart
-              }
-          
-          ;if after going through all results the place is not found, exit
-          if(placeURI="") {
-              MsgBox, 4,,Place "%placeName%" not found. Try again?
-                
-              Gui, Destroy
-              
-              IfMsgBox Yes
-              {
-                  Goto, loopStart
-              }
-             
-              ExitApp
-          }
-          
-        }
-      
-        
-      /*************************************************************************************************************************
-       *
-       *   Get list of files already existing in place
-       *  
-       */
-       
-      wInfo("**********************************" )
-      wInfo("*** Getting list of files already existing in """ . placeName . """")
-      
-      startIndex := 0
-      pageSize := 100
-      
-      ;will store the list of files found and some of their attributes in an array
-      existingFiles := {}
-      
-      Loop{
-      
-          cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . """" . jiveInstanceURL . "/api/core/v3/contents?count=" . pageSize . "&startIndex=" . startIndex . "&fields=name,subject,content,tags,categories,parent&filter=place%28" . placeURI . "%29&filter=type%28file%29"""
-                
-          ;wPrint(cURL_command . "`n")
-          
-          Cmd := ComObjCreate("WScript.Shell")
-          CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
-          output := CmdRun.StdOut.ReadAll()
-          position := RegExMatch(output,";\R{")
-          jsonStr := SubStr(output,position+2)
-          
-          if(debug="1")
-            wPrint(output . "`n")
-          
-          ;error handling
-          ;check if the server sent the list of content
-          if (position=0) {
-            ;oops there is no clean response from Jive server
-            ;display the response in the user interface            
-            GuiControl, Hide, MyText
-            Gui, Add, ActiveX, w500 h500 x0 y30 vdoc, HTMLFile
-            doc.write("Error connecting to Jive<br><br>Output:<br><hr><br>" . output)
-            Gui, Show, w500 h500 Center, HTML Gui
-            ComObjConnect(doc, Document)             
-            MsgBox, 4,,Error connecting to Jive. Try again?
-            Gui, Destroy            
-            IfMsgBox Yes
-                {
-                startAgain = true
-                break
-                }             
-            ExitApp
-          }          
-          if(startAgain) {
-             break
-          }
-          
-          ;now parse the response
-          jsonObj := JSON.parse( jsonStr )
-          
-          ;if there are no content items or no more items to fetch, break the loop
-          if (jsonObj.list.MaxIndex()="")
-              break
-          
-          ;verify that the list of results is really coming from the target place (if the ID provided is actually the ID of a person Jive replies with the list of files of the person)
-          if (jsonObj.list[1].parent <> placeURI ){
-              MsgBox, 4,,The destination place ID you provided is not a place ID.`n`nMaybe you'll be more lucky using the destination place NAME instead of its ID. Try again?
-              Gui, Destroy
-              IfMsgBox Yes
-                  {
-                  startAgain = true
-                  break
-                  }
-              ExitApp
-          }
-          
-          ;this is the list of content items. Store it.
-          Loop % jsonObj.list.MaxIndex()
-            {
-              ;storing the name of each file, reference, subject, description, tags and categories
-              existingFiles.Insert( uriDecode(jsonObj.list[A_Index].name) , [uriDecode(jsonObj.list[A_Index].resources.self.ref), jsonObj.list[A_Index].subject, jsonObj.list[A_Index].content.text, jsonObj.list[A_Index].tags, jsonObj.list[A_Index].categories ] )
-              wInfo( "  " . uriDecode(jsonObj.list[A_Index].name) ) 
-            }
-          
-          startIndex := startIndex + pageSize
-          
-      }
-      
-      ;if the procedure was aborted, go back to input screen
-      if(startAgain) {
-         goto loopstart
-      }
-      
-      /*************************************************************************************************************************
-       *
-       *   Upload files
-       *  
-       */
-      
-      wInfo("**********************************" )
-      wInfo("*** Uploading files into " . placeName )
-      
-      Loop, %filePattern%
-        {
-            ;if the file already exists
-            ;check if the file already exists in Jive with the zip extention
-            addZIPext := ( ObjHasKey(existingFiles, A_LoopFileName . ".zip" ) ) ? ".zip"  : ""
-            ;check if the file already exists in Jive (or with the zip extension)
-            if ( ObjHasKey(existingFiles, A_LoopFileName) or (addZIPext<>"") ) 
-              {
-                ;if the option is the update the file, do it, otherwise, skip the file
-                if updateExisting {
-                  
-                  wInfo( A_LoopFileName . " is getting updated with the latest version.")
-                  
-                  ;using "cou.tmp" to temporarily store the JSON string for the CURL command (as it would be too long to be in a command)
-                  FileDelete, cou.tmp            
-                  contentString := existingFiles[A_LoopFileName][3]
-                  
-                  ;escaping ""
-                  StringReplace, contentString, contentString, ", \", All
-                  
-                  ;concatenate existing file tags with user provided file tags - also do this with categories
-                  contentTags := arrayToString(Arr_merge(existingFiles[A_LoopFileName][4],tagsA))
-                  contentCategories := arrayToString(Arr_merge(existingFiles[A_LoopFileName][5],categoriesA))
-                  
-                  ;build the json string            
-                  contentJson := "{""type"":""file"",""subject"":'" . existingFiles[A_LoopFileName . addZIPext][2] . "',""visibility"":""place"",""parent"":'" . placeURI . "',""content"":{""type"":'text/html',""text"":""" . contentString . """},""tags"":" . contentTags . ",""categories"":" . contentCategories . "}"            
-                  
-                  ;for debugging: the JSON string in clear
-                  if(debug="1")
-                      wPrint( "JSON string sent to the server:`n" . contentJson . "`n" )
-                  
-                  ;storing the JSON string into the temporary file
-                  FileAppend, %contentJson% , cou.tmp
-                  
-                  ;build the CURL command
-                  cURL_command := "CURL -X PUT -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . "-F file1=@""" . A_LoopFileFullPath . """ -F ""json=@cou.tmp;type=application/json"" " . existingFiles[A_LoopFileName . withZIPext][1]
-                  CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
-                  output := CmdRun.StdOut.ReadAll() 
-                  ;wPrint(cURL_command . "`n")
-                  
-                  position := RegExMatch(output,"\R\R{")
-                  jsonStr := SubStr(output,position+2)
-                  
-                  if(debug="1")
-                      wPrint(output . "`n")
-                  
-                  jsonObj := JSON.parse( jsonStr )
-                  
-                  if(jsonObj.error<>""){
-                      wInfo( "  ... Error " . jsonObj.error.status . " : " . jsonObj.error.message )
-                      errorCount++
-                  } else {
-                      wInfo( "  ... updated successfully" )
-                  }
-                  
-                  ;delete the temporary JSON file
-                  FileDelete, cou.tmp            
-                }
-                else
-                  wInfo( A_LoopFileName . " skipped (already existed).")
-              }
-            else
-              {
-                ;if the file does not exists - create it!
-                
-                wInfo( A_LoopFileName . " does not exist yet and will be created.")
-                FileDelete, cou.tmp            
-                
-                contentTags := arrayToString(tagsA)
-                contentCategories := arrayToString(categoriesA)
-                            
-                contentJson := "{""type"":""file"",""subject"":'" . A_LoopFileName . "',""visibility"":""place"",""parent"":'" . placeURI . "',""content"":{""type"":'text/html',""text"":""""},""tags"":" . contentTags . ",""categories"":" . contentCategories . "}"            
-                if(debug="1")
-                    wPrint( "JSON string sent to the server:`n" . contentJson . "`n" )
-                FileAppend, %contentJson% , cou.tmp
-                cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . "-F file1=@""" . A_LoopFileFullPath . """ -F ""json=@cou.tmp;type=application/json"" " . jiveInstanceURL . "/api/core/v3/contents"
-                CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
-                ;wPrint(cURL_command . "`n")
-                output := CmdRun.StdOut.ReadAll()
-                if(debug="1")
-                    wPrint(output . "`n")
-                
-                position := RegExMatch(output,"\R\R{")
-                jsonStr := SubStr(output,position+2)
-                
-                if(debug="1")
-                    wPrint(output . "`n")
-                
-                jsonObj := JSON.parse( jsonStr )
-                
-                if(jsonObj.error<>""){
-                    wInfo( "  ... Error " . jsonObj.error.status . " : " . jsonObj.error.message )
-                    errorCount++
-                } else {
-                    wInfo( "  ... uploaded successfully" )
-                }
-              }
-              
-            ;verify that the error is not caused by an invalid Place ID (if the ID provided was actually the ID of a person Jive replies with the list of files of the person)
-            if(jsonObj.error<>"")
-            {
-              je:=jsonObj.error.message
-              IfInString, je, Invalid place ID
-              {
-                  MsgBox, 4,,The destination place ID you provided is not a place ID.`n`nMaybe you'll be more lucky using the destination place NAME instead of its ID. Try again?
-                  Gui, Destroy
-                  IfMsgBox Yes
-                      {
-                      startAgain = true
-                      break
-                      }
-                  ExitApp
-              }
-            }
-        }
-      
-      if(startAgain) {
-          Goto, loopStart
-      }
-                
-      ;wInfo(debugString)
-      wInfo("**********************************" )
-      wInfo("Operation complete") 
-      wInfo("**********************************" )
-      wInfo(".")
-      MsgBox, 4,, Operation complete with %errorCount% errors. Upload more files?
-      
-      Gui, Destroy
-    
-      IfMsgBox Yes
-          {
-            goto, loopStart
-          }
-       else 
-          ExitApp
-       
-       return
+	;to record the number of upload errors
+	errorCount:=0
+
+	;this is to store when there was a failure and the user wants to start again
+	startAgain:=0
+
+	/*************
+	* GUI to capture user input if the first 8 variables were not provided as parameters
+	* If some variables were provided as parameters or in the config file they will show pre-populated in the UI 
+	*/
+
+	if ( (0<8) and (prompt<>"none") )
+	{
+		; get parameters when not provided as command line
+		  
+		if (prompt<>"authenticate") 
+		{
+			Gui, Add, Text, x6 y10 w160 h30 0x2, Jive URL
+			Gui, Add, Edit, x176 y6 w180 vjiveInstanceURL, %jiveInstanceURL%
+			Gui, Add, Text, x362 y10, ex: https://mycompany.jiveon.com
+
+			Gui, Add, Text, x10 y40 w160 h30 0x2 , Path and pattern of files to upload
+			Gui, add, Edit, x176 y36 w180 vfilePattern, %filePattern% 
+			Gui, Add, Text, x362 y40, ex: g:\temp\*.png
+
+			Gui, Add, Text, x10 y70 w160 h30 0x2 , Add the following tags
+			Gui, add, Edit, x176 y66 w180 vtags, %tags% 
+			Gui, Add, Text, x362 y70, ex: blue,large
+
+			Gui, Add, Text, x10 y100 w160 h30 0x2 , Add the following categories
+			Gui, add, Edit, x176 y96 w180 vcategories, %categories%
+			Gui, Add, Text, x362 y100, ex: products,blue line
+
+			Gui, Add, Text, x6 y130 w160 h30 0x2, Destination place (name or ID)
+			Gui, Add, Edit, x176 y126 w180 vplaceName, %placeName%
+			Gui, Add, Text, x362 y130, ex: my place
+
+			Gui, Add, Text, x10 y160 w160 h30 0x2, When a file exists in destination
+
+			if updateExisting=1
+			Gui, add, DropDownList, x176 y156 w180 vupdateExisting, skip it|update it with source file||
+			else
+			Gui, add, DropDownList, x176 y156 w180 vupdateExisting, skip it||update it with source file
+		}
+		Gui, Add, Text, x10 y190 w160 h30 0x2, User ID
+		Gui, add, Edit, x176 y186 w180 vuserID, %userID%
+		Gui, Add, Text, x362 y190, ex: XID 
+
+		Gui, Add, Text, x6 y220 w160 h30 0x2, Password
+		Gui, Add, Edit, x176 y216 w180 vpassword password, %password%
+		Gui, Add, Text, x362 y220, ex: myPA55worD 
+
+		
+		if (prompt<>"authenticate") 
+		{
+			Gui, Add, Text, x6 y250 w160 h30 0x2, More CURL parameters
+			Gui, Add, Edit, x176 y246 w180 h20 vcurlExtra, %curlExtra%
+			Gui, Add, Text, x362 y250, ex: -x http://proxy.mycompany.com:8123 --proxy-user XID:myPA55worD -k
+		}
+		 
+		Gui, add, Button, gSubmit x176 y280 w180, OK 
+		Gui, show
+
+		return
+
+		;if escape, close or cancel is used, exit the app gracefully
+		GuiEscape:
+		GuiClose:
+		ButtonCancel:
+		ExitApp
+		
+	}
+	
+	;if submit button was used, clear the UI
+	Submit:
+	Gui, Submit, NoHide
+	Gui, Destroy
+	
+	;Replace userID and password within curlExtra parameters if <userID> or <password> is provided
+	StringReplace, curlExtra, curlExtra, <userID>, %userID%, All       
+	StringReplace, curlExtra, curlExtra, <password>, %password%, All
+
+	;**********
+	;GUI to display output
+	Gui +LastFound +ToolWindow 
+	Gui, Color, FFFFFF
+	Gui Font, s10 Bold
+	Gui, Add, Text, , Uploading files matching pattern %filePattern% into group %placeName% 
+	Gui Font, s8 BoldNormal 
+	Gui Color, BBBBBB 
+	Gui, Add, Text, w600 h390 vMyText -Background, ttttttt 
+	Gui, Show, % "x" . A_ScreenWidth/2-310 . " y" . A_ScreenHeight/2-210 . " w620 h440"      
+	;This variable will store information to display while the app runs
+	infoString := ""
+
+	/*************************************************************************************************************************
+	* record place and file parameters in a placeList object if the place and file data was not provided through uploadToJive.cfg
+	*/
+	
+	if (placeList<>"") {
+		;nothing to do: list of places and file attributes already in placeList array
+	} else {
+		placeList := [{}]
+		placeList[1].placeName:= placeName
+		placeList[1].list := [{}]
+		placeList[1].list[1].filePattern:= filePattern
+		placeList[1].list[1].tags:= StrSplit(tags, "`,")
+		placeList[1].list[1].categories:= StrSplit(categories, "`,")
+		
+		p1:= placeList[1].placeName
+	}
+		
+	/*************************************************************************************************************************
+	*
+	*   Loop through all target places.
+	*  
+	*/
+	
+	for each, value in placeList
+    {
+		placeName:= value.placeName
+		fileList:= value.list
+	
+		;**********
+		;check if the place ID was provided, if so build place UI, otherwise, get the place ID by searching through all matching places
+
+		if updateExisting is not integer
+			updateExisting := (updateExisting="skip it")?0:1
+		
+		if placeName is integer 
+		{
+			placeURI := jiveInstanceURL . "/api/core/v3/places/" . placeName
+		}
+		else
+		{
+			/*
+			*   Get place URI
+			*/ 
+			wInfo("**********************************" )
+			wInfo("Getting place ID of """ . placeName . """")
+
+			;start at first result, and download list of places by batch of 25
+			startIndex := 0
+			pageSize := 25
+
+			;loop until there is no more place result
+			Loop {
+				;CURL command to get the list of matching places
+				cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : " " . curlExtra . " ") . " """ . jiveInstanceURL . "/api/core/v3/places?count=" . pageSize . "&startIndex=" . startIndex . "&filter=search%28" . uriEncode(placeName) . "%29"""
+				;wPrint(cURL_command . "`n")
+
+				;call the CURL command
+				Cmd := ComObjCreate("WScript.Shell")
+				CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
+
+				;catch the output
+				output := CmdRun.StdOut.ReadAll()
+
+				;send to out file for debugging
+				if(debug="1")
+				wPrint(output . "`n")
+
+				;clean up the response to use only the JSON response part
+				position := RegExMatch(output,";\R{")
+				;}
+				jsonStr := SubStr(output,position+2)
+
+				;error handling
+				;check if the server sent a response
+				if (position=0) {
+					;oops there is no clean response from Jive server
+					;display the response in the user interface
+
+					GuiControl, Hide, MyText
+					Gui, Add, ActiveX, w500 h500 x0 y30 vdoc, HTMLFile
+					doc.write("Error connecting to Jive<br><br>Output:<br><hr><br>" . output)
+					Gui, Show, w500 h500 Center, HTML Gui
+					ComObjConnect(doc, Document)
+
+					MsgBox, 4,,Error connecting to Jive. Try again?
+
+					Gui, Destroy
+
+					IfMsgBox Yes
+						{
+						startAgain = true
+						break
+						}
+
+					ExitApp
+				}
+
+				if(startAgain) {
+				  Goto, loopStart
+				}
+
+				;convert the JSON response into an object
+				jsonObj := JSON.parse( jsonStr )
+
+				;if the JSON response is an empty list (=no result or no more result) stop looping
+				if (jsonObj.list.MaxIndex()="")
+				  break
+
+				;go through the list of results
+				For index, valueP in jsonObj.list
+				{
+				  ;wInfo( "  " . valueP.name )
+				  ;check if the result is the expected place
+				  if(valueP.name = placeName)
+				  {
+					  ;capture the placeURI
+					  placeURI := valueP.resources.self.ref
+					  wInfo("Place ID of """ . valueP.name . """ : " . valueP.placeID)
+					  break
+				  }
+				}
+			  
+				;if the place was not found, keep looping, otherwise, exit the loop
+				if(placeURI="")
+				{
+				startIndex := startIndex + pageSize
+				} else {
+				  break
+				}
+
+			}
+
+			if(startAgain) {
+				Goto, loopStart
+			}
+
+			;if after going through all results the place is not found, exit
+			if(placeURI="") {
+				MsgBox, 4,,Place "%placeName%" not found. Try again?
+
+				Gui, Destroy
+
+				IfMsgBox Yes
+				{
+					Goto, loopStart
+				}
+
+				ExitApp
+			}
+		  
+		}
+
+		/*************************************************************************************************************************
+		*
+		*   Get list of files already existing in place
+		*  
+		*/
+
+		wInfo("**********************************" )
+		wInfo("*** Getting list of files already existing in """ . placeName . """")
+
+		startIndex := 0
+		pageSize := 100
+
+		;will store the list of files found and some of their attributes in an array
+		existingFiles := {}
+
+		Loop{
+
+		  cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . """" . jiveInstanceURL . "/api/core/v3/contents?count=" . pageSize . "&startIndex=" . startIndex . "&fields=name,subject,content,tags,categories,parent&filter=place%28" . placeURI . "%29&filter=type%28file%29"""
+				
+		  ;wPrint(cURL_command . "`n")
+		  
+		  Cmd := ComObjCreate("WScript.Shell")
+		  CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
+		  output := CmdRun.StdOut.ReadAll()
+		  position := RegExMatch(output,";\R{")
+		  ;}
+		  jsonStr := SubStr(output,position+2)
+		  
+		  if(debug="1")
+			wPrint(output . "`n")
+		  
+		  ;error handling
+		  ;check if the server sent the list of content
+		  if (position=0) {
+			;oops there is no clean response from Jive server
+			;display the response in the user interface            
+			GuiControl, Hide, MyText
+			Gui, Add, ActiveX, w500 h500 x0 y30 vdoc, HTMLFile
+			doc.write("Error connecting to Jive<br><br>Output:<br><hr><br>" . output)
+			Gui, Show, w500 h500 Center, HTML Gui
+			ComObjConnect(doc, Document)             
+			MsgBox, 4,,Error connecting to Jive. Try again?
+			Gui, Destroy            
+			IfMsgBox Yes
+				{
+				startAgain = true
+				break
+				}             
+			ExitApp
+		  }          
+		  if(startAgain) {
+			 break
+		  }
+		  
+		  ;now parse the response
+		  jsonObj := JSON.parse( jsonStr )
+		  
+		  ;if there are no content items or no more items to fetch, break the loop
+		  if (jsonObj.list.MaxIndex()="")
+			  break
+		  
+		  ;verify that the list of results is really coming from the target place (if the ID provided is actually the ID of a person Jive replies with the list of files of the person)
+		  if (jsonObj.list[1].parent <> placeURI ){
+			  MsgBox, 4,,The destination place ID you provided is not a place ID.`n`nMaybe you'll be more lucky using the destination place NAME instead of its ID. Try again?
+			  Gui, Destroy
+			  IfMsgBox Yes
+				  {
+				  startAgain = true
+				  break
+				  }
+			  ExitApp
+		  }
+		  
+		  ;this is the list of content items. Store it.
+		  Loop % jsonObj.list.MaxIndex()
+			{
+			  ;storing the name of each file, reference, subject, description, tags and categories
+			  existingFiles.Insert( uriDecode(jsonObj.list[A_Index].name) , [uriDecode(jsonObj.list[A_Index].resources.self.ref), jsonObj.list[A_Index].subject, jsonObj.list[A_Index].content.text, jsonObj.list[A_Index].tags, jsonObj.list[A_Index].categories ] )
+			  wInfo( "  " . uriDecode(jsonObj.list[A_Index].name) ) 
+			}
+		  
+		  startIndex := startIndex + pageSize
+		  
+		}
+
+		;if the procedure was aborted, go back to input screen
+		if(startAgain) {
+		 goto loopstart
+		}
+
+		
+		
+		/*************************************************************************************************************************
+		*
+		*   Loop through all files in fileList.
+		*  
+		*/
+		
+		for feach, fvalue in fileList
+		{
+			filePattern:= fvalue.filePattern
+			tagsA:= fvalue.tags
+			categoriesA:= fvalue.categories
+		
+			/*************************************************************************************************************************
+			*
+			*   Prepare file data
+			*  
+			*/
+
+			;clean up the filePattern in case user used forward slash instead of backward slash
+			StringReplace, filePattern, filePattern, /, \, All
+
+			/*************************************************************************************************************************
+			*
+			*   Upload files
+			*  
+			*/
+
+			wInfo("**********************************" )
+			wInfo("*** Uploading files into " . placeName )
+
+			Loop, %filePattern%
+			{
+				;if the file already exists
+				;check if the file already exists in Jive with the zip extention
+				addZIPext := ( ObjHasKey(existingFiles, A_LoopFileName . ".zip" ) ) ? ".zip"  : ""
+				;check if the file already exists in Jive (or with the zip extension)
+				if ( ObjHasKey(existingFiles, A_LoopFileName) or (addZIPext<>"") ) 
+				{
+					;if the option is the update the file, do it, otherwise, skip the file
+					if updateExisting
+					{
+					  
+						wInfo( A_LoopFileName . " is getting updated with the latest version.")
+
+						;using "cou.tmp" to temporarily store the JSON string for the CURL command (as it would be too long to be in a command)
+						FileDelete, cou.tmp
+
+						if (fvalue.text<>"") {
+							contentString := fvalue.text
+						} else {
+							contentString := existingFiles[A_LoopFileName][3]
+						}
+
+						if (fvalue.subject<>"") {
+							subject := fvalue.subject
+						} else {
+							subject := existingFiles[A_LoopFileName . addZIPext][2]
+						}
+						
+						;concatenate existing file tags with user provided file tags - also do this with categories
+						contentTags := arrayToString(Arr_merge(existingFiles[A_LoopFileName][4],tagsA))
+						contentCategories := arrayToString(Arr_merge(existingFiles[A_LoopFileName][5],categoriesA))
+
+						;build the json string            
+						contentJson := "{""type"":""file"",""subject"":'" . subject . "',""visibility"":""place"",""parent"":'" . placeURI . "',""content"":{""type"":'text/html',""text"":""" . contentString . """},""tags"":" . contentTags . ",""categories"":" . contentCategories . "}"            
+
+						;for debugging: the JSON string in clear
+						if(debug="1")
+						  wPrint( "JSON string sent to the server:`n" . contentJson . "`n" )
+
+						;storing the JSON string into the temporary file
+						FileAppend, %contentJson% , cou.tmp
+
+						;build the CURL command
+						cURL_command := "CURL -X PUT -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . "-F file1=@""" . A_LoopFileFullPath . """ -F ""json=@cou.tmp;type=application/json"" " . existingFiles[A_LoopFileName . withZIPext][1]
+						CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
+						output := CmdRun.StdOut.ReadAll() 
+						;wPrint(cURL_command . "`n")
+
+						position := RegExMatch(output,"\R\R{")
+						;}
+						jsonStr := SubStr(output,position+2)
+
+						if(debug="1")
+						  wPrint(output . "`n")
+
+						jsonObj := JSON.parse( jsonStr )
+
+						if(jsonObj.error<>""){
+							wInfo( "  ... Error " . jsonObj.error.status . " : " . jsonObj.error.message )
+							errorCount++
+						} else {
+							wInfo( "  ... updated successfully" )
+						}
+
+						;delete the temporary JSON file
+						FileDelete, cou.tmp            
+					}
+					else
+					  wInfo( A_LoopFileName . " skipped (already existed).")
+				}
+				else
+				{
+					;if the file does not exists - create it!
+					
+					wInfo( A_LoopFileName . " does not exist yet and will be created.")
+					FileDelete, cou.tmp            
+					
+					contentTags := arrayToString(tagsA)
+					contentCategories := arrayToString(categoriesA)
+					
+					if (fvalue.text<>"") {
+						contentString := fvalue.text
+					} else {
+						contentString := ""
+					}
+					
+					if (fvalue.subject<>"") {
+						subject := fvalue.subject
+					} else {
+						subject := A_LoopFileName
+					}
+								
+					contentJson := "{""type"":""file"",""subject"":'" . subject . "',""visibility"":""place"",""parent"":'" . placeURI . "',""content"":{""type"":'text/html',""text"":""" . contentString . """},""tags"":" . contentTags . ",""categories"":" . contentCategories . "}"            
+					if(debug="1")
+						wPrint( "JSON string sent to the server:`n" . contentJson . "`n" )
+					FileAppend, %contentJson% , cou.tmp
+					cURL_command := "CURL -i -u " . userID . ":" . password . " -k " . (curlExtra = "" ? "" : curlExtra . " ") . "-F file1=@""" . A_LoopFileFullPath . """ -F ""json=@cou.tmp;type=application/json"" " . jiveInstanceURL . "/api/core/v3/contents"
+					CmdRun := Cmd.Exec(ComSpec . " /c cURL.exe " . cURL_command)
+					;wPrint(cURL_command . "`n")
+					output := CmdRun.StdOut.ReadAll()
+					if(debug="1")
+						wPrint(output . "`n")
+					
+					position := RegExMatch(output,"\R\R{")
+					;}
+					jsonStr := SubStr(output,position+2)
+					
+					if(debug="1")
+						wPrint(output . "`n")
+					
+					jsonObj := JSON.parse( jsonStr )
+					
+					if(jsonObj.error<>""){
+						wInfo( "  ... Error " . jsonObj.error.status . " : " . jsonObj.error.message )
+						errorCount++
+					} else {
+						wInfo( "  ... uploaded successfully" )
+					}
+				}
+				  
+				;verify that the error is not caused by an invalid Place ID (if the ID provided was actually the ID of a person Jive replies with the list of files of the person)
+				if(jsonObj.error<>"")
+				{
+					je:=jsonObj.error.message
+					IfInString, je, Invalid place ID
+					{
+						MsgBox, 4,,The destination place ID you provided is not a place ID.`n`nMaybe you'll be more lucky using the destination place NAME instead of its ID. Try again?
+						Gui, Destroy
+						IfMsgBox Yes
+							{
+							startAgain = true
+							break
+							}
+						ExitApp
+					}
+				}
+			}
+			
+		}
+		
+	}
+
+	if(startAgain) {
+	  Goto, loopStart
+	}
+			
+	;wInfo(debugString)
+	wInfo("**********************************" )
+	wInfo("Operation complete") 
+	wInfo("**********************************" )
+	wInfo(".")
+	MsgBox, 4,, Operation complete with %errorCount% errors. Upload more files?
+
+	Gui, Destroy
+
+	IfMsgBox Yes
+	  {
+		goto, loopStart
+	  }
+	else 
+	  ExitApp
+
 }
+
+

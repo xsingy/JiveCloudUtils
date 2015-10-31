@@ -40,26 +40,40 @@ List of available fields:
   categories
   placeName
   updateExisting
-  username
+  userID
   password
-  curlExtra
-  debug
+  curlExtra (extra CURL attributes for special cases (proxy, etc - see "More CURL parameters example above)
+  debug (set debug to 1 to output Jive server response to the out.txt file)
+  prompt (set prompt to "authenticate" to only prompt for username and password but no other field;set prompt to "none" for no prompt at all)
+  list (read below, for multi file upload)
  
-Format of UploadToJive.cfg:
+Example format of UploadToJive.cfg:
 { 
 "jiveInstanceURL" : "https://mycompany.jiveon.com",
 "curlExtra" : "-x http://myproxy.com:myproxyport --proxy-user <userID>:<password> -k"
 }
  
-Drop it in the same folder as UploadToJive.exe. When the user starts UploadToJive.exe the fields will already have the values you defined..
+Drop it in the same folder as UploadToJive.exe. When the user starts UploadToJive.exe the fields will already have the values you defined.
+
+
+Using a config file to upload many files with different attributes to different places
+-------------------
+
+To upload multiple files with different parameters, provide the attributes in a multi levels
+level 0: list
+level 1: placeName
+level 1: list
+level 2: fileName, tags, categories[, subject][, text]  
+example: "list" : [{"placeName" : "Jive Anywhere test group","list" : [{"filePattern" : "c:/temp/s*.jpg","tags":["blue","green"]},{"filePattern" : "c:/temp/k*.png","tags":["purple","lemon"],"text":"<body><div class=\"jive-rendered-content\"><p>adding some description</p><p><strong>some bold text</strong></p><p style=\"min-height: 8pt; padding: 0px;\">&nbsp;</p><table><tbody><tr><td style=\";\">and a cell in a table</td><td style=\";\">another celle</td></tr><tr><td style=\";\">and a 3 cell in a table</td><td style=\";\">another 4 cell</td></tr></tbody></table></div></body>"}]}]
+
  
 
 Command Line
 ------------
  
-Alternatively, you can upload without opening the dialog box, using a Command Line
+You can upload using a Command Line and based on the UploadToJive.cfg file, user may or not be prompted for input.
  
-If you do not understand what a "command line" is then use the other method ;-)
+If you do not understand what a "command line" is then use the other method (see "Using it" section above)
 
 For command line usage, type the command
 UploadToJive.exe ?
